@@ -8,7 +8,7 @@ from .models import Link
 
 class LinkSerializer(serializers.ModelSerializer):
     short_url = serializers.SerializerMethodField()
-    clicks_count = serializers.SerializerMethodField()
+    clicks_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Link
@@ -29,6 +29,11 @@ class LinkSerializer(serializers.ModelSerializer):
         )
 
     def validate_original_url(self, value):
+        if len(value) > 2048:
+            raise serializers.ValidationError(
+                "URL не должен превышать 2048 символов."
+            )
+
         parsed_url = urlparse(value)
 
         if parsed_url.scheme not in ("http", "https"):
@@ -46,9 +51,6 @@ class LinkSerializer(serializers.ModelSerializer):
     def get_short_url(self, obj):
         base_url = settings.SHORT_URL_BASE.rstrip("/")
         return f"{base_url}/{obj.short_code}"
-
-    def get_clicks_count(self, obj):
-        return obj.clicks.count()
 
     def create(self, validated_data):
         request = self.context.get("request")
