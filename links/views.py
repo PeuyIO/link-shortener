@@ -13,6 +13,10 @@ from analytics.models import Click
 from .models import Link
 from .serializers import LinkSerializer
 
+from rest_framework.pagination import PageNumberPagination
+
+from analytics.serializers import ClickSerializer
+
 
 class LinkListView(generics.ListCreateAPIView):
     serializer_class = LinkSerializer
@@ -75,3 +79,40 @@ class RedirectView(APIView):
             )
 
         return HttpResponseRedirect(link.original_url)
+
+class LinkStatsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        link = get_object_or_404(
+            Link,
+            id=pk,
+            owner=request.user,
+        )
+
+        return Response({
+            "link_id": link.id,
+            "short_code": link.short_code,
+            "original_url": link.original_url,
+            "clicks_count": link.clicks_count,
+            "created_at": link.created_at,
+        })
+
+class ClicksPagination(PageNumberPagination):
+    page_size = 50
+
+class LinkClicksView(generics.ListAPIView):
+    serializer_class = ClickSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = ClicksPagination
+
+    def get_queryset(self):
+        link = get_object_or_404(
+            Link,
+            id=self.kwargs["pk"],
+            owner=self.request.user,
+        )
+
+        return Click.objects.filter(
+            link=link
+        ).order_by("-clicked_at")
