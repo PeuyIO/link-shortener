@@ -2,20 +2,25 @@ from django.db import transaction
 from django.db.models import F
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
+from django.db.models import Count
+from django.db.models.functions import TruncDate
+from django.utils import timezone
 
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 
 from analytics.models import Click
+from analytics.serializers import ClickSerializer
 
 from .models import Link
 from .serializers import LinkSerializer
 
 from rest_framework.pagination import PageNumberPagination
 
-from analytics.serializers import ClickSerializer
+from datetime import datetime, time, timedelta
 
 
 class LinkListView(generics.ListCreateAPIView):
@@ -90,11 +95,66 @@ class LinkStatsView(APIView):
             owner=request.user,
         )
 
+        start_date = request.query_params.get("from")
+        end_date = request.query_params.get("to")
+
+        if not start_date or not end_date:
+            raise ValidationError({
+                "detail": "Параметры from и to обязательны."
+            })
+
+        try:
+            start_date = datetime.strptime(
+                start_date, "%Y-%m-%d"
+            ).date()
+            end_date = datetime.strptime(
+                end_date, "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            raise ValidationError({
+                "detail": "Используй формат даты YYYY-MM-DD."
+            })
+
+        if start_date > end_date:
+            raise ValidationError({
+                "detail": "Дата from не может быть позже to."
+            })
+
+        start = timezone.make_aware(
+            datetime.combine(start_date, time.min)
+        )
+        end = timezone.make_aware(
+            datetime.combine(
+                end_date + timedelta(days=1),
+                time.min,
+            )
+        )
+
+        clicks = Click.objects.filter(
+            link=link,
+            clicked_at__gte=start,
+            clicked_at__lt=end,
+        )
+
+        daily_stats = (
+            clicks
+            .annotate(date=TruncDate("clicked_at"))
+            .values("date")
+            .annotate(count=Count("id"))
+            .order_by("date")
+        )
+
         return Response({
             "link_id": link.id,
             "short_code": link.short_code,
             "original_url": link.original_url,
             "clicks_count": link.clicks_count,
+            "period": {
+                "from": start_date,
+                "to": end_date,
+                "clicks_count": clicks.count(),
+            },
+            "daily_stats": list(daily_stats),
             "created_at": link.created_at,
         })
 
