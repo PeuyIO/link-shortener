@@ -116,3 +116,16 @@ class LinkClicksView(generics.ListAPIView):
         return Click.objects.filter(
             link=link
         ).order_by("-clicked_at")
+
+class LinkTopView(generics.ListAPIView):
+    serializer_class = LinkSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        return Link.objects.filter(
+            owner=self.request.user
+        ).order_by(
+            "-clicks_count",
+            "id",
+        )[:5]
