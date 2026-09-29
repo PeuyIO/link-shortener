@@ -49,8 +49,7 @@ class LinkSerializer(serializers.ModelSerializer):
         return value
 
     def get_short_url(self, obj):
-        base_url = settings.SHORT_URL_BASE.rstrip("/")
-        return f"{base_url}/{obj.short_code}"
+        return f"{settings.SHORT_URL_BASE.rstrip('/')}/{obj.short_code}"
 
     def create(self, validated_data):
         request = self.context.get("request")
